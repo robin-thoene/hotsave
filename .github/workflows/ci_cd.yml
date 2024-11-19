@@ -1,0 +1,62 @@
+name: CI-CD
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+  workflow_dispatch:
+
+env:
+  BINARY_NAME: hotsave
+  ARTIFACT_NAME: hotsave-artifact
+  LINUX_TARGET_x86_64: x86_64-unknown-linux-gnu
+
+jobs:
+  build:
+    name: Build cli application
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup tooling
+        run: |
+          sudo apt-get install -y libxi-dev libxtst-dev
+          rustup update stable
+          rustup default stable
+          cargo install cargo-edit
+      - name: Install GitVersion
+        uses: gittools/actions/gitversion/setup@v3.0.2
+        with:
+          versionSpec: "5.x"
+      - name: Determine version
+        uses: gittools/actions/gitversion/execute@v3.0.2
+        with:
+          useConfigFile: true
+          configFilePath: GitVersion.yml
+      - name: Build Linux release
+        run: |
+          echo $GitVersion_FullSemVer
+          cargo set-version $GitVersion_FullSemVer
+          cargo build --locked --release --bin ${{ env.BINARY_NAME }} --target=${{ env.LINUX_TARGET_x86_64 }}
+      - name: Create artifact
+        run: |
+          mkdir dist
+          tar -C ./target/${{ env.LINUX_TARGET_x86_64 }}/release -zcvf ./dist/${{ env.LINUX_TARGET_x86_64 }}.tar.gz ./${{ env.BINARY_NAME }}
+      - name: Publish artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: dist
+
+  publish:
+    if: github.event_name == 'push'
+    name: Publish the artifacts
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Publish GitHub release
+        run: echo "TODO"
