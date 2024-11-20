@@ -71,6 +71,6 @@ jobs:
       - name: Load version
         run: echo "VERSION=$(cat ./dist/version.txt)" >> $GITHUB_ENV
       - name: Publish GitHub release
-        run: gh release create --repo $GITHUB_REPOSITORY --draft --title "New release" --notes "This is a new automatically generated release" ${{ env.VERSION }} ./dist/*.tar.gz
+        run: gh release create --repo $GITHUB_REPOSITORY --title "New release" --notes "This is a new automatically generated release" ${{ env.VERSION }} ./dist/*.tar.gz
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PAT }}
