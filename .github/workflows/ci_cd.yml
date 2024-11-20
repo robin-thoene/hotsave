@@ -37,16 +37,19 @@ jobs:
         with:
           useConfigFile: true
           configFilePath: GitVersion.yml
+      - name: Store version
+        run: |
+          mkdir dist
+          echo  "$GitVersion_FullSemVer" > ./dist/version.txt
       - name: Build Linux release
         run: |
-          echo $GitVersion_FullSemVer
           cargo set-version $GitVersion_FullSemVer
           cargo build --locked --release --bin ${{ env.BINARY_NAME }} --target=${{ env.LINUX_TARGET_x86_64 }}
       - name: Create artifact
         run: |
-          mkdir dist
           tar -C ./target/${{ env.LINUX_TARGET_x86_64 }}/release -zcvf ./dist/${{ env.LINUX_TARGET_x86_64 }}.tar.gz ./${{ env.BINARY_NAME }}
       - name: Publish artifact
+        if: github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME }}
@@ -54,9 +57,18 @@ jobs:
 
   publish:
     if: github.event_name == 'push'
-    name: Publish the artifacts
+    name: Create release
     runs-on: ubuntu-latest
     needs: build
     steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: dist
+      - name: Load version
+        run: echo "VERSION=$(cat ./dist/version.txt)" >> $GITHUB_ENV
       - name: Publish GitHub release
-        run: echo "TODO"
+        run: gh release create --repo $GITHUB_REPOSITORY --draft --title "New release" --notes "This is a new automatically generated release" ${{ env.VERSION }} ./dist/*.tar.gz
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
