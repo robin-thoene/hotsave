@@ -16,9 +16,11 @@ env:
   ARTIFACT_NAME_LINUX: hotsave-linux
   ARTIFACT_NAME_MACOS: hotsave-macos
   ARTIFACT_NAME_MACOS_ARM: hotsave-macos-arm
+  ARTIFACT_NAME_WINDOWS: hotsave-windows
   LINUX_TARGET_x86_64: x86_64-unknown-linux-gnu
   MACOS_TARGET_x86_64: x86_64-apple-darwin
   MACOS_TARGET_ARM: aarch64-apple-darwin
+  WINDOWS_TARGET_x86_64: x86_64-pc-windows-gnu
 
 jobs:
   store_version:
@@ -147,32 +149,70 @@ jobs:
         with:
           name: ${{ env.ARTIFACT_NAME_MACOS_ARM }}
           path: dist
-
-  publish:
-    if: github.event_name == 'push'
-    name: Create release
-    runs-on: ubuntu-latest
-    needs: [store_version, build_linux, build_macos, build_macos_arm]
+  windows:
+    name: Build for windows
+    runs-on: windows-latest
+    needs: store_version
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME_VERSION }}
           path: dist
-      - name: Download artifact
+      - name: Load version
+        run: echo "VERSION=$(Get-Content -Path .\dist\version.txt)" >> $env:GITHUB_ENV
+      - name: Setup tooling
+        run: |
+          rustup update stable
+          rustup default stable
+          rustup target install ${{ env.WINDOWS_TARGET_x86_64 }}
+          cargo install cargo-edit
+      - name: Build windows release
+        run: |
+          cargo set-version ${{ env.VERSION }}
+          cargo build --locked --release --bin ${{ env.BINARY_NAME }} --target=${{ env.WINDOWS_TARGET_x86_64 }}
+      - name: Create artifact
+        run: tar -C .\target\${{ env.WINDOWS_TARGET_x86_64 }}\release -zcvf .\dist\${{ env.WINDOWS_TARGET_x86_64 }}.tar.gz .\${{ env.BINARY_NAME }}.exe
+      - name: Publish artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME_WINDOWS }}
+          path: dist
+
+  publish:
+    if: github.event_name == 'push'
+    name: Create release
+    runs-on: ubuntu-latest
+    needs: [store_version, build_linux, build_macos, build_macos_arm, windows]
+    steps:
+      - name: Download version artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME_VERSION }}
+          path: dist
+      - name: Download Linux artifact
         uses: actions/download-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME_LINUX }}
           path: dist
-      - name: Download artifact
+      - name: Download macOS artifact
         uses: actions/download-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME_MACOS }}
           path: dist
-      - name: Download artifact
+      - name: Download macOS ARM artifact
         uses: actions/download-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME_MACOS_ARM }}
+          path: dist
+      - name: Download windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME_WINDOWS }}
           path: dist
       - name: Load version
         run: echo "VERSION=$(cat ./dist/version.txt)" >> $GITHUB_ENV
